@@ -293,6 +293,41 @@ export const getStripePriceFromPlanOrThrow = async (plan: Plan) => {
   return defaultPrice;
 };
 
+/**
+ * Retrieve the amount due for the upcoming invoice.
+ * We use that amount for blocking build if spending limit is reached.
+ */
+export async function getUpcomingInvoiceAmountDue(account: Account) {
+  const manager = account.$getSubscriptionManager();
+  const subscription = await manager.getActiveSubscription();
+
+  // No active subscription, no total available
+  if (!subscription) {
+    return null;
+  }
+
+  // Only support total for Stripe subscriptions.
+  if (subscription.provider !== "stripe") {
+    return null;
+  }
+
+  invariant(
+    subscription.stripeSubscriptionId,
+    "`stripeSubscriptionId` should be set for Stripe subscriptions",
+  );
+
+  try {
+    const upcomingInvoice = await stripe.invoices.retrieveUpcoming({
+      subscription: subscription.stripeSubscriptionId,
+    });
+    return upcomingInvoice.amount_due;
+  } catch (error) {
+    throw new Error("Error while getting amount spent for current period", {
+      cause: error,
+    });
+  }
+}
+
 export const updateStripeUsage = async ({
   account,
   totalScreenshots,
